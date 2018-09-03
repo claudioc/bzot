@@ -4,9 +4,9 @@ This is apparently something similar to an HTTP server. A server which speaks HT
 
 ## Seriously?
 
-I was once very good at C and I miss those years. What should I do? Write some C, obviously.
+I was once very good at C and I miss those years. What should I do, then? But write some random C, obviously.
 
-But what? A network server, of course. And why HTTP? Well, because…
+But what can I do? A network server, of course. And why HTTP? Well, because…
 
 - It's pretty straightforward (you know how it's supposed to work and how to _start_ testing its features)
 - There are plenty of clients to test it, and it's easy to benchmark
@@ -16,6 +16,8 @@ But what? A network server, of course. And why HTTP? Well, because…
 ## Goals
 
 None. Just write some C and have fun parsing headers and read cconfiguration files.
+
+I will probably stop once I feel the need of `automake/autoconf`.
 
 Also[segmentation fault]
 
