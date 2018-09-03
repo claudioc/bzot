@@ -1,3 +1,20 @@
+/** 
+ * Bzot – The useless http server
+ * Copyright (C) 2018, Claudio Cicali <claudio.cicali@gmail.com>
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,9 +24,12 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <fcntl.h>
 
 #define MY_PORT 8080
 #define MY_MAX_CONNECTIONS 3
+
+#define USE_NON_BLOCKING_SOCKETS false
 
 static bool set_sock_opt(int socket, int option, bool enable) {
 	int yes = (enable ? 1 : 0);
@@ -26,12 +46,13 @@ int main(int argc, char **argv) {
   struct sockaddr_in client;
   const int sockaddr_in_len = sizeof(struct sockaddr_in);
   
-  // SO_REUSEADDRESS
-  // SOCK_NONBLOCK
+  (void)argc;
+  (void)argv;
+
   server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (server_sockfd == -1) {
-    fputs("Can't open server socket", stderr);
+    fprintf(stderr, "Can't open server socket: %s\n", strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -40,6 +61,14 @@ int main(int argc, char **argv) {
   set_sock_opt(server_sockfd, SO_REUSEPORT, true);
   #endif
 
+  // Set the socket to be non-blocking.
+  // If this option is activated, remember to also set the client
+  // socket to be non-blocking upon connection.
+  #if USE_NON_BLOCKING_SOCKETS
+  fcntl(server_sockfd, F_SETFL, fcntl(server_sockfd, F_GETFL, 0) | O_NONBLOCK);
+  #endif
+
+  memset(&server, 0, sizeof(server));
   server.sin_family = AF_INET;
   server.sin_addr.s_addr = INADDR_ANY;
   server.sin_port = htons(MY_PORT);
@@ -49,7 +78,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Bind failed on endpoint socket: %s\n", strerror(errno));
     return EXIT_FAILURE;
   }
-  
+
   int listened = listen(server_sockfd, MY_MAX_CONNECTIONS);
   if (listened == -1) {
     fprintf(stderr, "Listen failed on endpoint socket: %s\n", strerror(errno));
@@ -69,8 +98,6 @@ int main(int argc, char **argv) {
       return EXIT_FAILURE;
     }
     puts("Connection accepted");
-    char *client_ip = inet_ntoa(client.sin_addr);
-    int client_port = ntohs(client.sin_port);
 
     int child_pid = fork();
     if (child_pid == -1) {
@@ -93,9 +120,45 @@ int main(int argc, char **argv) {
 }
 
 void handle_connection(int sockfd) {
-  char *message = "Greetings! I am your connection handler\n";
-  write(sockfd, message, strlen(message));
+  char buffer[1024];
+  int received;
+
+  memset(buffer, 0x00, sizeof(buffer));
+  while ((received = read(sockfd, buffer, sizeof(buffer)))) {
+    printf("Read %d chars", received);
+    buffer[received] = 0x00;
+    puts(buffer);
+    memset(buffer, 0x00, sizeof(buffer));
+    // TODO handle the case where telnet must send \n\n
+  }
+
   close(sockfd);
   puts("Handler is done");
   exit(0);
 }
+
+/*
+void sigchld_handler(int s)
+{
+	(void)s; // quiet unused variable warning
+
+	// waitpid() might overwrite errno, so we save and restore it:
+	int saved_errno = errno;
+
+	while(waitpid(-1, NULL, WNOHANG) > 0);
+
+	errno = saved_errno;
+}
+
+
+// Put this before while(true)
+struct sigaction sa;
+
+sa.sa_handler = sigchld_handler; // reap all dead processes
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART;
+	if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+		perror("sigaction");
+		exit(1);
+	}
+*/
