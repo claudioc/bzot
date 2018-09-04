@@ -32,9 +32,9 @@
 #define USE_NON_BLOCKING_SOCKETS false
 
 static bool set_sock_opt(int socket, int option, bool enable) {
-	int yes = (enable ? 1 : 0);
-	int err = setsockopt(socket, SOL_SOCKET, option,  &yes, sizeof(yes));
-	return !err;
+  int yes = (enable ? 1 : 0);
+  int err = setsockopt(socket, SOL_SOCKET, option,  &yes, sizeof(yes));
+  return !err;
 }
 
 void handle_connection(int);
@@ -123,9 +123,10 @@ int main(int argc, char **argv) {
 
 void cleanup_worker(int signal) {
   (void)signal;
-  // int status;
-  // waitpid(child, &status, 0);
-  while (waitpid((pid_t) (-1), 0, WNOHANG) > 0) {}
+  // waitpid() might overwrite errno, so we save and restore it:
+  int saved_errno = errno;
+  while (waitpid((pid_t) (-1), 0, WNOHANG) > 0);
+  errno = saved_errno;
 }
 
 void handle_connection(int sockfd) {
@@ -146,29 +147,3 @@ void handle_connection(int sockfd) {
   puts("Handler is done");
   exit(0);
 }
-
-/*
-void sigchld_handler(int s)
-{
-	(void)s; // quiet unused variable warning
-
-	// waitpid() might overwrite errno, so we save and restore it:
-	int saved_errno = errno;
-
-	while(waitpid(-1, NULL, WNOHANG) > 0);
-
-	errno = saved_errno;
-}
-
-
-// Put this before while(true)
-struct sigaction sa;
-
-sa.sa_handler = sigchld_handler; // reap all dead processes
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_RESTART;
-	if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-		perror("sigaction");
-		exit(1);
-	}
-*/
