@@ -15,7 +15,17 @@
             "environment": [],
             "externalConsole": false,
             "MIMode": "lldb",
-            "preLaunchTask": "Build bzot"
+            "preLaunchTask": "Build bzot",
+            "setupCommands": [
+                {
+                    "text": "-gdb-set follow-fork-mode child"
+                },
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }

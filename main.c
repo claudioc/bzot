@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
   int client_sockfd;
   struct sockaddr_in server;
   struct sockaddr_in client;
-  const int sockaddr_in_len = sizeof(struct sockaddr_in);
+  size_t sockaddr_in_len = sizeof(struct sockaddr_in);
 
   (void)argc;
   (void)argv;
@@ -74,14 +74,12 @@ int main(int argc, char **argv) {
   server.sin_addr.s_addr = INADDR_ANY;
   server.sin_port = htons(MY_PORT);
 
-  int bound = bind(server_sockfd, (struct sockaddr *)&server, sizeof(server));
-  if (bound < 0) {
+  if (-1 == bind(server_sockfd, (struct sockaddr *)&server, sizeof(server))) {
     fprintf(stderr, "Bind failed on endpoint socket: %s\n", strerror(errno));
     return EXIT_FAILURE;
   }
 
-  int listened = listen(server_sockfd, MY_MAX_CONNECTIONS);
-  if (listened == -1) {
+  if (-1 == listen(server_sockfd, MY_MAX_CONNECTIONS)) {
     fprintf(stderr, "Listen failed on endpoint socket: %s\n", strerror(errno));
     return EXIT_FAILURE;
   }
@@ -102,12 +100,12 @@ int main(int argc, char **argv) {
 
     signal(SIGCHLD, cleanup_worker);
     int child_pid = fork();
-    if (child_pid == -1) {
+    if (-1 == child_pid) {
       fprintf(stderr, "Fork failed on accept: %s\n", strerror(errno));
       return EXIT_FAILURE;
     }
 
-    if (child_pid == 0) {
+    if (0 == child_pid) {
       // As a child, we don't need the server socket anymore
       close(server_sockfd);
       handle_connection(client_sockfd);
@@ -129,14 +127,37 @@ void cleanup_worker(int signal) {
   errno = saved_errno;
 }
 
+// char *read_first_line(int, char *, size_t);
+// char **read_headers(int, char *);
+// char **read_body(int, char *);
+
 void handle_connection(int sockfd) {
-  const unsigned int BUFSIZE = 20;
-  char buffer[BUFSIZE];
-  int received;
+  size_t BUFSIZE = 20;
+  ssize_t received;
+  char buffer[BUFSIZE + 1];
+
+  // TODO skip the first empty lines, if any
+  // char *first_line = read_first_line(sockfd, buffer);
+  // read_headers(sockfd, buffer);
+  // read_body(sockfd, buffer);
+  received = read(sockfd, buffer, BUFSIZE);
+  if ('\r' == buffer[received - 1]) {
+    read(sockfd, buffer + BUFSIZE, 1);
+  }
+
+  char *line_start = buffer;
+  char *line_end;
+  while ((line_end = (char *)memchr((void *)line_start, '\n', BUFSIZE - (line_start - buffer)))) {
+    *line_end = 0;
+    puts("[");
+    puts(line_start);
+    puts("]");
+    line_start = line_end + 1;
+  }
 
   memset(buffer, 0x00, BUFSIZE);
   while ((received = read(sockfd, buffer, BUFSIZE))) {
-    printf("Read %d chars", received);
+    printf("Read %d chars", (unsigned int)received);
     buffer[received] = 0x00;
     puts(buffer);
     memset(buffer, 0x00, sizeof(buffer));
@@ -147,3 +168,15 @@ void handle_connection(int sockfd) {
   puts("Handler is done");
   exit(0);
 }
+
+// char *read_first_line(int sockfd, char *buffer, size_t max) {
+//   return NULL;
+// }
+
+// char **read_headers(int sockfd, char *buffer) {
+//   return NULL;
+// }
+
+// char **read_body(int sockfd, char *buffer) {
+//   return NULL;
+// }
