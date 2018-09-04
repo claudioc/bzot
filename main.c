@@ -1,17 +1,17 @@
-/** 
+/**
  * Bzot – The useless http server
  * Copyright (C) 2018, Claudio Cicali <claudio.cicali@gmail.com>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
@@ -38,6 +38,7 @@ static bool set_sock_opt(int socket, int option, bool enable) {
 }
 
 void handle_connection(int);
+void cleanup_worker(int);
 
 int main(int argc, char **argv) {
   int server_sockfd;
@@ -45,7 +46,7 @@ int main(int argc, char **argv) {
   struct sockaddr_in server;
   struct sockaddr_in client;
   const int sockaddr_in_len = sizeof(struct sockaddr_in);
-  
+
   (void)argc;
   (void)argv;
 
@@ -99,12 +100,13 @@ int main(int argc, char **argv) {
     }
     puts("Connection accepted");
 
+    signal(SIGCHLD, cleanup_worker);
     int child_pid = fork();
     if (child_pid == -1) {
       fprintf(stderr, "Fork failed on accept: %s\n", strerror(errno));
       return EXIT_FAILURE;
     }
-    
+
     if (child_pid == 0) {
       // As a child, we don't need the server socket anymore
       close(server_sockfd);
@@ -112,19 +114,27 @@ int main(int argc, char **argv) {
     } else {
       // As a server, we don't need the client socket anymore
       close(client_sockfd);
-      waitpid(child_pid, NULL, 0);
     }
+    puts("Ready for more");
   }
 
   return EXIT_SUCCESS;
 }
 
+void cleanup_worker(int signal) {
+  (void)signal;
+  // int status;
+  // waitpid(child, &status, 0);
+  while (waitpid((pid_t) (-1), 0, WNOHANG) > 0) {}
+}
+
 void handle_connection(int sockfd) {
-  char buffer[1024];
+  const unsigned int BUFSIZE = 20;
+  char buffer[BUFSIZE];
   int received;
 
-  memset(buffer, 0x00, sizeof(buffer));
-  while ((received = read(sockfd, buffer, sizeof(buffer)))) {
+  memset(buffer, 0x00, BUFSIZE);
+  while ((received = read(sockfd, buffer, BUFSIZE))) {
     printf("Read %d chars", received);
     buffer[received] = 0x00;
     puts(buffer);
