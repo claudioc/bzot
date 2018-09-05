@@ -28,5 +28,6 @@ Also[segmentation fault]
 - [x] Basic networking
 - [x] I have a server, and I can connect to it
 - [x] Fork or threads? Fork
-- [x] Blocking or not blocking? Not blocking
-- [ ]
+- [x] Blocking or not blocking? Blocking with fork
+- [x] Read the HTTP request
+- [ ] Parse the HTTP request

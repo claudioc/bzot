@@ -26,10 +26,13 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
-#define MY_PORT 8080
+#define MY_PORT 8081
 #define MY_MAX_CONNECTIONS 3
 
 #define USE_NON_BLOCKING_SOCKETS false
+
+// Using lldb on OSX, we can't debug child processes with VSC
+#define USE_MULTIPROCESS false
 
 static bool set_sock_opt(int socket, int option, bool enable) {
   int yes = (enable ? 1 : 0);
@@ -39,6 +42,8 @@ static bool set_sock_opt(int socket, int option, bool enable) {
 
 void handle_connection(int);
 void cleanup_worker(int);
+void dump_buffer(char *, int);
+bool binstr(const void *, size_t, const char *);
 
 int main(int argc, char **argv) {
   int server_sockfd;
@@ -98,6 +103,7 @@ int main(int argc, char **argv) {
     }
     puts("Connection accepted");
 
+    #if USE_MULTIPROCESS
     signal(SIGCHLD, cleanup_worker);
     int child_pid = fork();
     if (-1 == child_pid) {
@@ -113,6 +119,10 @@ int main(int argc, char **argv) {
       // As a server, we don't need the client socket anymore
       close(client_sockfd);
     }
+    #else
+      handle_connection(client_sockfd);
+    #endif
+
     puts("Ready for more");
   }
 
@@ -132,51 +142,59 @@ void cleanup_worker(int signal) {
 // char **read_body(int, char *);
 
 void handle_connection(int sockfd) {
-  size_t BUFSIZE = 20;
-  ssize_t received;
-  char buffer[BUFSIZE + 1];
+  size_t CHUNKSIZE = 20;
+  unsigned int chunks = 0;
+  char *buffer = (char *)malloc(CHUNKSIZE);
 
-  // TODO skip the first empty lines, if any
-  // char *first_line = read_first_line(sockfd, buffer);
-  // read_headers(sockfd, buffer);
-  // read_body(sockfd, buffer);
-  received = read(sockfd, buffer, BUFSIZE);
-  if ('\r' == buffer[received - 1]) {
-    read(sockfd, buffer + BUFSIZE, 1);
+  memset((void *)buffer, 0x00, CHUNKSIZE);
+  while (read(sockfd, buffer + (CHUNKSIZE * chunks), CHUNKSIZE) > 0) {
+    chunks++;
+    // A '0d0a0d0a' in the buffer signals the end of the request
+    if (binstr(buffer, CHUNKSIZE * chunks, "\r\n\r\n")) {
+      break;
+    }
+    // dump_buffer(buffer, (CHUNKSIZE * chunks));
+    buffer = realloc((void *)buffer, CHUNKSIZE * (chunks + 1));
+    memset((void *)buffer + (CHUNKSIZE * chunks), 0x00, CHUNKSIZE);
   }
 
-  char *line_start = buffer;
-  char *line_end;
-  while ((line_end = (char *)memchr((void *)line_start, '\n', BUFSIZE - (line_start - buffer)))) {
-    *line_end = 0;
-    puts("[");
-    puts(line_start);
-    puts("]");
-    line_start = line_end + 1;
+  unsigned char ch;
+  for (unsigned int i = 0; i < CHUNKSIZE * chunks; i++) {
+    ch = buffer[i];
+    putchar(ch);
+    //if (ch == '\n')
   }
 
-  memset(buffer, 0x00, BUFSIZE);
-  while ((received = read(sockfd, buffer, BUFSIZE))) {
-    printf("Read %d chars", (unsigned int)received);
-    buffer[received] = 0x00;
-    puts(buffer);
-    memset(buffer, 0x00, sizeof(buffer));
-    // TODO handle the case where telnet must send \n\n
-  }
-
+  free(buffer);
   close(sockfd);
+
   puts("Handler is done");
+  #if USE_MULTIPROCESS
   exit(0);
+  #endif
 }
 
-// char *read_first_line(int sockfd, char *buffer, size_t max) {
-//   return NULL;
-// }
+/**
+ * binstr - searches a block of memory for a given character string
+ * Boyer-Moore is faster https://gist.github.com/obstschale/3060059
+ */
+bool binstr(const void *bin, size_t bin_sz, const char *str) {
+  const char *c_bin;
+  unsigned int bin_i, str_i;
+  
+  c_bin = bin;
+  for (bin_i = 0; bin_i < bin_sz; bin_i++) {
+    for (str_i = 0; c_bin[bin_i + str_i] == str[str_i] && str[str_i]; str_i++);
+    if (!str[str_i]) {
+      return true;
+    }
+  }
+  return false;
+}
 
-// char **read_headers(int sockfd, char *buffer) {
-//   return NULL;
-// }
-
-// char **read_body(int sockfd, char *buffer) {
-//   return NULL;
-// }
+void dump_buffer(char *buffer, int max_length) {
+  for (int i = 0; i < max_length; i++) {
+    printf("[%02x]", buffer[i]);
+  }
+  printf("\n");
+}
