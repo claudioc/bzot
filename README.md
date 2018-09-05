@@ -30,4 +30,5 @@ Also[segmentation fault]
 - [x] Fork or threads? Fork
 - [x] Blocking or not blocking? Blocking with fork
 - [x] Read the HTTP request
+- [x] Reply "Hello from Bzot" to the browser
 - [ ] Parse the HTTP request

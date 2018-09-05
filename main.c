@@ -32,7 +32,7 @@
 #define USE_NON_BLOCKING_SOCKETS false
 
 // Using lldb on OSX, we can't debug child processes with VSC
-#define USE_MULTIPROCESS false
+#define USE_MULTIPROCESS true
 
 static bool set_sock_opt(int socket, int option, bool enable) {
   int yes = (enable ? 1 : 0);
@@ -137,33 +137,33 @@ void cleanup_worker(int signal) {
   errno = saved_errno;
 }
 
-// char *read_first_line(int, char *, size_t);
-// char **read_headers(int, char *);
-// char **read_body(int, char *);
-
 void handle_connection(int sockfd) {
   size_t CHUNKSIZE = 20;
-  unsigned int chunks = 0;
+  size_t read_size = 0;
+  size_t total_read = 0;
   char *buffer = (char *)malloc(CHUNKSIZE);
 
-  memset((void *)buffer, 0x00, CHUNKSIZE);
-  while (read(sockfd, buffer + (CHUNKSIZE * chunks), CHUNKSIZE) > 0) {
-    chunks++;
+  while ((read_size = read(sockfd, buffer + total_read, CHUNKSIZE)) > 0) {
+    total_read += read_size;
     // A '0d0a0d0a' in the buffer signals the end of the request
-    if (binstr(buffer, CHUNKSIZE * chunks, "\r\n\r\n")) {
+    buffer[total_read] = 0x00;
+    if (strstr(buffer, "\r\n\r\n") != NULL) {
       break;
     }
-    // dump_buffer(buffer, (CHUNKSIZE * chunks));
-    buffer = realloc((void *)buffer, CHUNKSIZE * (chunks + 1));
-    memset((void *)buffer + (CHUNKSIZE * chunks), 0x00, CHUNKSIZE);
+
+    if (total_read > CHUNKSIZE) {
+      buffer = realloc((void *)buffer, CHUNKSIZE + 1);
+    }
   }
 
   unsigned char ch;
-  for (unsigned int i = 0; i < CHUNKSIZE * chunks; i++) {
+  for (unsigned int i = 0; i < total_read; i++) {
     ch = buffer[i];
     putchar(ch);
-    //if (ch == '\n')
   }
+
+  const char *reply = "HTTP/1.1 200 OK\r\n\r\nHello from bzot!\r\n";
+  write(sockfd, reply, strlen(reply));
 
   free(buffer);
   close(sockfd);
@@ -172,24 +172,6 @@ void handle_connection(int sockfd) {
   #if USE_MULTIPROCESS
   exit(0);
   #endif
-}
-
-/**
- * binstr - searches a block of memory for a given character string
- * Boyer-Moore is faster https://gist.github.com/obstschale/3060059
- */
-bool binstr(const void *bin, size_t bin_sz, const char *str) {
-  const char *c_bin;
-  unsigned int bin_i, str_i;
-  
-  c_bin = bin;
-  for (bin_i = 0; bin_i < bin_sz; bin_i++) {
-    for (str_i = 0; c_bin[bin_i + str_i] == str[str_i] && str[str_i]; str_i++);
-    if (!str[str_i]) {
-      return true;
-    }
-  }
-  return false;
 }
 
 void dump_buffer(char *buffer, int max_length) {
